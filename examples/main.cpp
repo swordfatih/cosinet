@@ -1,9 +1,8 @@
-#include <spdlog/spdlog.h>
-
-import starter;
-import std;
+import cosinet.app;
 
 int main()
 {
-    spdlog::info("{}", starter::starter::to_string());
+    cosinet::app app;
+    app.update();
+    return 0;   
 }

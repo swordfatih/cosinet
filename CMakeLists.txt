@@ -38,16 +38,23 @@ if(MINGW)
 endif()
 
 # ------------------------
+# Dependencies
+# ------------------------
+include(FetchContent)
+
+set(CENTUI_BUILD_SFML ON CACHE BOOL "")
+FetchContent_Declare(centui GIT_REPOSITORY https://github.com/swordfatih/centui.git GIT_TAG main)
+FetchContent_MakeAvailable(centui)
+
+# ------------------------
 # Library
 # ------------------------
-file(GLOB_RECURSE cpp_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 file(GLOB_RECURSE module_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/modules/*.cppm")
 
 add_library(${PROJECT_NAME} STATIC)
 add_library(${PROJECT_NAME}::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
 target_sources(${PROJECT_NAME}
-    PRIVATE ${cpp_sources}
     PUBLIC FILE_SET CXX_MODULES BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/modules" FILES ${module_sources}
 )
 
@@ -55,11 +62,10 @@ target_compile_features(${PROJECT_NAME} PUBLIC cxx_std_26)
 target_compile_options(${PROJECT_NAME} PUBLIC -freflection)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_MODULE_STD ON)
 
-target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
-
 target_link_libraries(${PROJECT_NAME}
     PRIVATE ${PROJECT_NAME}_config
     # add dependencies here
+    centui::centui centui::backend::sfml
 )
 
 # ------------------------
