@@ -64,6 +64,12 @@ public:
             throw std::runtime_error("Boundary has no slope-intercept form");
         }
 
+        // cartesian equation : ax + by + c
+        // with a = weights.x, b = weights.y, c = bias
+        // 
+        // slope intercept form :
+        // slope = -a / b
+        // intercept = -c / b 
         return {
             .x = -m_weights.x / m_weights.y,
             .y = -m_bias / m_weights.y,
@@ -72,8 +78,8 @@ public:
 
 private:
     point m_weights{0.f, 0.f};
-    float m_learning = 1.f;
     float m_bias = 0.f;
+    float m_learning = 0.01f;
 };
 
 } // namespace cosinet

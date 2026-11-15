@@ -13,7 +13,8 @@ module;
 export module cosinet.app;
 
 import cosinet.style;
-import cosinet.perceptron;
+import cosinet.vector;
+import cosinet.dimensional_perceptron;
 
 export namespace cosinet
 {
@@ -56,58 +57,72 @@ public:
         }
     }
 
-    std::vector<cosinet::point> generate_points()
+    /* we check if the point is higher or lower the given line */
+    bool classifier(const cosinet::vector<float, 2>& point, float slope, float intercept)
+    {
+        float projection = slope * point.a + intercept;
+        return point.b > projection;
+    }
+
+    auto generate_samples(float slope, float intercept)
     {
         std::mt19937 random_generator{std::random_device{}()};
-        std::uniform_real_distribution<float> random_distribution{0.f, 1000.f};
+        std::uniform_real_distribution<float> random_distribution{-1.f, 1.f};
 
-        std::vector<cosinet::point> points;
+        std::vector<cosinet::dimensional_perceptron<2>::sample> samples;
 
         for(size_t i = 0; i < 1000; ++i)
         {
-            points.push_back(
-                cosinet::point{
-                    .x = random_distribution(random_generator),
-                    .y = random_distribution(random_generator),
-                }
-            );
+            auto input = cosinet::vector<float, 2>{
+                random_distribution(random_generator),
+                random_distribution(random_generator),
+            };
+
+            samples.push_back({
+                .input = input,
+                .group_factor = classifier(input, slope, intercept) ? 1 : -1,
+            });
         }
 
-        return points;
+        return samples;
     }
 
-    std::vector<sf::CircleShape> generate_circles(std::vector<cosinet::point>& points, float slope, float intercept)
+    auto generate_circles(
+        const std::vector<cosinet::dimensional_perceptron<2>::sample>& samples,
+        float slope,
+        float intercept
+    )
     {
         std::vector<sf::CircleShape> circles;
-        for(auto& point: points)
+        for(const auto& sample: samples)
         {
             sf::CircleShape circle(2);
-            circle.setPosition({point.x, point.y});
 
-            float ordinate = slope * point.x + intercept;
-            point.group = (point.y > ordinate) ? 1 : -1;
-            circle.setFillColor(point.group > 0 ? sf::Color::Red : sf::Color::Blue);
+            // scale coordinates to make it visible on window
+            circle.setPosition({(sample.input.a + 1.f) * 500.f, (sample.input.b + 1.f) * 500.f});
 
+            circle.setFillColor(sample.group_factor < 0 ? sf::Color::Red : sf::Color::Blue);
             circles.push_back(circle);
         }
 
         return circles;
     }
 
-    auto generate_boundary(std::vector<cosinet::point> points)
+    auto generate_boundary(const std::vector<cosinet::dimensional_perceptron<2>::sample>& samples, float slope, float intercept)
     {
-        cosinet::perceptron perceptron;
-        perceptron.train(points);
+        cosinet::dimensional_perceptron<2> perceptron;
+        perceptron.train(samples);
 
         return perceptron.boundary();
     }
 
-    auto generate_line(point& boundary)
+    auto generate_line(const cosinet::vector<float, 2>& boundary)
     {
         const float width = static_cast<float>(m_window.getSize().x);
+        auto scaled_intercept = (boundary.b + 1.f - boundary.a) * 500.f;
         std::vector<sf::Vertex> line = {
-            {{0.f, boundary.y}, sf::Color::Green},
-            {{width, boundary.x * width + boundary.y}, sf::Color::Green},
+            {{0.f, scaled_intercept}, sf::Color::Green},
+            {{width, boundary.a * width + scaled_intercept}, sf::Color::Green},
         };
         return line;
     }
@@ -115,35 +130,38 @@ public:
     void update()
     {
         float slope = 0.1f;
-        float intercept = 500.f;
+        float intercept = 0.5f;
 
-        auto points = generate_points();
-        auto circles = generate_circles(points, slope, intercept);
-        
-        auto boundary = generate_boundary(points);
+        auto samples = generate_samples(slope, intercept);
+        auto circles = generate_circles(samples, slope, intercept);
+        auto boundary = generate_boundary(samples, slope, intercept);
         auto line = generate_line(boundary);
-        
-        auto values = centui::text<caption>{std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.x, boundary.y)};
+
+        auto values = centui::text<caption>{
+            std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.a, boundary.b)
+        };
 
         const auto update_slope = [&](float value) mutable
         {
             slope = value;
-            values->set_text(std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.x, boundary.y));
-            circles = this->generate_circles(points, slope, intercept);
+            values->set_text(std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.a, boundary.b));
+            samples = generate_samples(slope, intercept);
+            circles = this->generate_circles(samples, slope, intercept);
         };
 
         const auto update_intercept = [&](float value) mutable
         {
             intercept = value;
-            values->set_text(std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.x, boundary.y));
-            circles = this->generate_circles(points, slope, intercept);
+            values->set_text(std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.a, boundary.b));
+            samples = generate_samples(slope, intercept);
+            circles = this->generate_circles(samples, slope, intercept);
         };
 
         const auto train_and_evaluate = [&]() mutable
         {
-            boundary = this->generate_boundary(points);
+            boundary = this->generate_boundary(samples, slope, intercept);
             line = this->generate_line(boundary);
-            values->set_text(std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.x, boundary.y));
+            values->set_text(std::format("User: {} {}. Perceptron: {} {}", slope, intercept, boundary.a, boundary.b));
         };
 
         auto root = centui::container<overlay>{
@@ -151,17 +169,17 @@ public:
                 centui::text<caption>{"Edit line"},
                 values,
                 centui::range<control>{{
-                    .minimum = -10,
-                    .maximum = 10,
+                    .minimum = -1,
+                    .maximum = 1,
                     .step = 0.01,
-                    .value = 0.1,
+                    .value = slope,
                     .on_change = update_slope,
                 }},
                 centui::range<control>{{
-                    .minimum = 0,
-                    .maximum = 1000,
+                    .minimum = -1,
+                    .maximum = 1,
                     .step = 0.01,
-                    .value = 500,
+                    .value = intercept,
                     .on_change = update_intercept,
                 }},
                 centui::button<control>{
